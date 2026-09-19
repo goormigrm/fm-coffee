@@ -163,6 +163,13 @@
   .form-actions .secondary { margin-top: 0; }
   .secondary:disabled { opacity: .6; cursor: default; }
 
+  .rec-row { display: flex; align-items: center; justify-content: center; gap: 4px 10px; flex-wrap: wrap; margin-top: 12px; }
+  .rec-row[hidden] { display: none; }
+  .rec-row .secondary { margin-top: 0; }
+  .rec-hint { font-size: 12px; color: var(--muted); }
+  /* 녹화 영상에는 녹화 버튼과 펼친 패널이 나오지 않게 한다 */
+  body.recording .rec-row { visibility: hidden; }
+
   @media (max-width: 520px) {
     body { padding: 16px 12px 36px; }
     .panel { padding: 24px 16px 24px; }
@@ -225,6 +232,10 @@
         </select>
       </label>
       <button class="draw" id="draw" type="button">추첨</button>
+    </div>
+    <div class="rec-row" id="recRow" hidden>
+      <button class="secondary" id="recDraw" type="button">녹화하며 추첨</button>
+      <span class="rec-hint" id="recHint">추첨 장면을 영상 파일로 저장해요 (에펨코리아 업로드용)</span>
     </div>
 
     <div class="results" id="results" aria-live="polite"></div>
@@ -542,27 +553,112 @@
     return card;
   }
 
-  drawBtn.addEventListener('click', async () => {
+  const busyButtons = [drawBtn, reloadBtn, applyBtn, $('#recDraw')];
+  const setBusy = (busy) => busyButtons.forEach((b) => { b.disabled = busy; });
+
+  function hasParticipants() {
+    if (parseNames(namesEl.value).length) return true;
+    setStatus('참여자가 없어요. 명단을 먼저 채워 주세요.', true);
+    return false;
+  }
+
+  async function runDraw() {
     const names = parseNames(namesEl.value);
-    if (!names.length) {
-      setStatus('참여자가 없어요. 명단을 먼저 채워 주세요.', true);
-      return;
-    }
     const k = Math.min(Number($('#size').value), names.length);
     const winners = pick(names.map((name, i) => ({ name, pos: i + 1 })), k);
 
-    drawBtn.disabled = reloadBtn.disabled = applyBtn.disabled = true;
     resultsEl.replaceChildren();
     $('#drawnAt').textContent = '';
 
     for (const [i, w] of winners.entries()) {
-      resultsEl.append(winnerCard(i + 1, w.name, w.pos));
+      const card = winnerCard(i + 1, w.name, w.pos);
+      resultsEl.append(card);
+      card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       await sleep(450);
     }
 
     const stamp = new Date().toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'medium' });
     $('#drawnAt').textContent = `${stamp} 추첨 · 참여 ${names.length}명 중 ${k}명`;
-    drawBtn.disabled = reloadBtn.disabled = applyBtn.disabled = false;
+  }
+
+  drawBtn.addEventListener('click', async () => {
+    if (!hasParticipants()) return;
+    setBusy(true);
+    await runDraw();
+    setBusy(false);
+  });
+
+  /* ---------- 녹화하며 추첨 ---------- */
+
+  const canRecord = !!navigator.mediaDevices?.getDisplayMedia && typeof MediaRecorder !== 'undefined';
+  $('#recRow').hidden = !canRecord;
+
+  function recorderType() {
+    return ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm']
+      .find((t) => MediaRecorder.isTypeSupported(t)) || '';
+  }
+
+  function saveFile(blob, ext) {
+    const d = new Date();
+    const p = (n) => String(n).padStart(2, '0');
+    const name = `추첨_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.${ext}`;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60_000);
+    return name;
+  }
+
+  // 지금 탭을 녹화하면서 추첨하고, 끝나면 영상 파일(mp4, 안 되면 webm)로 저장한다
+  $('#recDraw').addEventListener('click', async () => {
+    if (!hasParticipants()) return;
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: 30 },
+        audio: false,
+        preferCurrentTab: true,
+        selfBrowserSurface: 'include',
+        surfaceSwitching: 'exclude',
+      });
+    } catch {
+      $('#recHint').textContent = '녹화가 취소됐어요. 창에서 "허용"(이 탭 공유)을 눌러야 녹화돼요.';
+      return;
+    }
+
+    setBusy(true);
+    document.body.classList.add('recording');
+    document.querySelectorAll('details[open]').forEach((d) => { d.open = false; });
+    window.scrollTo(0, 0);
+
+    try {
+      const type = recorderType();
+      const recorder = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 6_000_000 });
+      const chunks = [];
+      recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+      const stopped = new Promise((resolve) => { recorder.onstop = resolve; });
+      const stop = () => { if (recorder.state !== 'inactive') recorder.stop(); };
+      stream.getVideoTracks()[0].addEventListener('ended', stop); // 크롬의 "공유 중지"를 누른 경우
+
+      recorder.start();
+      await sleep(1200);
+      await runDraw();
+      await sleep(2500);
+      stop();
+      await stopped;
+
+      const blob = new Blob(chunks, { type: type.split(';')[0] || 'video/webm' });
+      const name = saveFile(blob, type.includes('mp4') ? 'mp4' : 'webm');
+      const size = blob.size < 1048576 ? `${Math.ceil(blob.size / 1024)}KB` : `${(blob.size / 1048576).toFixed(1)}MB`;
+      $('#recHint').textContent = `저장했어요: ${name} (${size}) · 다운로드 폴더를 확인하세요`;
+    } catch (err) {
+      $('#recHint').textContent = `녹화에 실패했어요 (${err.message})`;
+    } finally {
+      stream.getTracks().forEach((t) => t.stop());
+      document.body.classList.remove('recording');
+      setBusy(false);
+    }
   });
 
   namesEl.addEventListener('input', updateCount);
