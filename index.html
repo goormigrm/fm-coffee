@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FC 안양 댓글 추첨</title>
+<meta name="description" content="에펨코리아 '안양만세' 댓글 작성자 중 메가커피 당첨자를 추첨합니다.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #260046;
+    --panel: #1e1526;
+    --panel-line: #3b2c49;
+    --gold: #ffe600;
+    --gold-deep: #f6b008;
+    --ink: #2a1900;
+    --text: #ece6f2;
+    --muted: #a99bb8;
+    --field: #131115;
+    --field-line: #cdb72c;
+    --purple: #4a0a8c;
+    --purple-line: #8a5ccc;
+    --danger: #ff8a8a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Noto Sans KR', 'Malgun Gothic', system-ui, sans-serif;
+    padding: 28px 16px 48px;
+  }
+  .panel {
+    max-width: 636px;
+    margin: 0 auto;
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    border-radius: 14px;
+    padding: 44px 28px 32px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, .35);
+  }
+  h1 {
+    margin: 0;
+    text-align: center;
+    color: var(--gold);
+    font-size: 30px;
+    font-weight: 900;
+    letter-spacing: -.5px;
+    text-shadow: 0 0 14px rgba(255, 214, 0, .55);
+  }
+  .sub { margin: 8px 0 0; text-align: center; font-size: 13px; color: #d9d2e0; }
+  .count { margin: 20px 0 10px; text-align: center; color: var(--gold); font-weight: 700; font-size: 15px; }
+
+  textarea {
+    display: block;
+    width: 100%;
+    background: var(--field);
+    color: #e9e3d3;
+    border: 2px solid var(--field-line);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-family: inherit;
+    font-size: 12.5px;
+    line-height: 1.6;
+    resize: vertical;
+  }
+  textarea:focus { outline: none; box-shadow: 0 0 0 3px rgba(255, 230, 0, .18); }
+  #names { height: 96px; }
+
+  .status {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 10px;
+    margin-top: 8px; font-size: 12px; color: var(--muted); text-align: center;
+  }
+  .status.error { color: var(--danger); }
+  .linkish {
+    background: none; border: 0; padding: 0; font: inherit; color: #cdb8ec;
+    text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+  }
+  .linkish:disabled { opacity: .5; cursor: default; }
+
+  .controls { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 22px; flex-wrap: wrap; }
+  .controls label { font-size: 14px; color: #e6e0ec; }
+  select {
+    background: var(--purple); color: #fff; border: 1px solid var(--purple-line); border-radius: 5px;
+    padding: 5px 8px; font-family: inherit; font-size: 14px; margin-left: 4px;
+  }
+  .draw {
+    min-width: 108px; height: 40px; padding: 0 26px; border: 0; border-radius: 999px;
+    background: linear-gradient(180deg, #fff06a, #fbd90f);
+    color: #222; font-family: inherit; font-size: 16px; font-weight: 900; cursor: pointer;
+    box-shadow: 0 0 18px rgba(255, 220, 0, .45);
+    transition: transform .15s, box-shadow .15s;
+  }
+  .draw:hover:not(:disabled) { transform: translateY(-1px) scale(1.03); box-shadow: 0 0 26px rgba(255, 220, 0, .6); }
+  .draw:disabled { opacity: .6; cursor: default; }
+
+  .results { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 24px; }
+  .results:empty { display: none; }
+  .win {
+    flex: 0 0 136px; min-height: 70px; padding: 10px 8px 9px; border-radius: 6px; text-align: center;
+    background: linear-gradient(135deg, #ffe20a, var(--gold-deep));
+    color: var(--ink); box-shadow: 0 6px 14px rgba(0, 0, 0, .35);
+    display: flex; flex-direction: column; justify-content: center; gap: 3px;
+    animation: pop .55s cubic-bezier(.2, .9, .3, 1.25) both;
+  }
+  .win .rank { font-size: 10.5px; font-weight: 700; color: #6b4c00; }
+  .win .nm { font-size: 15px; font-weight: 900; word-break: break-all; }
+  .win .pos { font-size: 10.5px; font-weight: 500; color: #7a5500; }
+  @keyframes pop {
+    from { opacity: .25; transform: scale(.55); filter: brightness(.45); }
+    to { opacity: 1; transform: scale(1); filter: none; }
+  }
+  .drawn-at { margin-top: 14px; text-align: center; font-size: 12px; color: var(--muted); }
+  .drawn-at:empty { display: none; }
+
+  details { margin-top: 18px; font-size: 13px; color: #d9d2e0; }
+  details + details { margin-top: 8px; }
+  summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
+  .excluded { margin: 8px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+  .excluded li { background: #16101c; border-radius: 6px; padding: 6px 10px; font-size: 12px; color: #bfb3cc; }
+  .excluded b { color: #efe8f6; margin-right: 6px; }
+  .note { margin: 8px 0; font-size: 12px; color: var(--muted); line-height: 1.6; }
+  #raw { height: 140px; border-color: var(--purple-line); }
+  .secondary {
+    margin-top: 8px; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--purple-line);
+    background: var(--purple); color: #fff; font-family: inherit; font-size: 13px; cursor: pointer;
+  }
+
+  @media (max-width: 520px) {
+    body { padding: 16px 12px 36px; }
+    .panel { padding: 30px 16px 24px; }
+    h1 { font-size: 23px; }
+    .win { flex-basis: calc(50% - 5px); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .win { animation: none; }
+  }
+</style>
+</head>
+<body>
+  <main class="panel">
+    <h1>FC 안양 팬 댓글 당첨자 추첨</h1>
+    <p class="sub">'안양만세' 댓글 중 영광의 당첨자를 선정합니다</p>
+
+    <div class="count">현재 참여 인원 <span id="count">0</span>명</div>
+    <textarea id="names" spellcheck="false" aria-label="참여자 명단 (쉼표로 구분)" placeholder="댓글을 불러오는 중…"></textarea>
+    <div class="status" id="status">
+      <span id="statusText">에펨코리아 댓글을 불러오는 중…</span>
+      <button class="linkish" id="reload" type="button">새로고침</button>
+      <a class="linkish" id="postLink" target="_blank" rel="noopener">원문 보기</a>
+    </div>
+
+    <div class="controls">
+      <label>당첨 인원 선택
+        <select id="size">
+          <option value="1">1명</option><option value="2">2명</option><option value="3" selected>3명</option>
+          <option value="4">4명</option><option value="5">5명</option><option value="6">6명</option>
+          <option value="7">7명</option><option value="8">8명</option><option value="9">9명</option>
+          <option value="10">10명</option>
+        </select>
+      </label>
+      <button class="draw" id="draw" type="button">추첨</button>
+    </div>
+
+    <div class="results" id="results" aria-live="polite"></div>
+    <div class="drawn-at" id="drawnAt"></div>
+
+    <details id="excludedBox" hidden>
+      <summary>제외된 댓글 작성자 <span id="excludedCount"></span></summary>
+      <ul class="excluded" id="excluded"></ul>
+    </details>
+
+    <details id="pasteBox">
+      <summary>댓글 직접 붙여넣기 (자동 불러오기가 안 될 때)</summary>
+      <p class="note">에펨코리아 글에서 댓글 영역을 전체 선택해 복사한 뒤 아래에 붙여넣고 <b>명단 만들기</b>를 누르세요.
+        작성자·중복은 빠지고 '안양만세'가 들어간 댓글을 단 사람만 명단에 들어갑니다.</p>
+      <textarea id="raw" spellcheck="false" placeholder="온필드리뷰 6 분 전&#10;마감&#10;기이구 6 분 전&#10;안양만세&#10;…"></textarea>
+      <button class="secondary" id="parseRaw" type="button">명단 만들기</button>
+    </details>
+  </main>
+
+<script>
+  const POST_ID = '10351544409';
+  const POST_URL = `https://www.fmkorea.com/${POST_ID}`;
+  const AUTHOR = '차짬';
+  // '안양만세', '안양만만세' 모두 인정. 띄어쓰기는 무시한다.
+  const KEYWORD = /안양만+세/;
+
+  const $ = (sel) => document.querySelector(sel);
+  const namesEl = $('#names');
+  const drawBtn = $('#draw');
+  const reloadBtn = $('#reload');
+  const resultsEl = $('#results');
+
+  // 이름 → 전체 댓글 중 몇 번째 댓글로 참여했는지
+  let commentOrder = new Map();
+
+  $('#postLink').href = POST_URL;
+
+  /* ---------- 명단 ---------- */
+
+  function parseNames(text) {
+    const parts = text.includes('\n') ? text.split('\n') : text.split(',');
+    return [...new Set(parts.map((s) => s.trim()).filter(Boolean))];
+  }
+
+  function setNames(list) {
+    // 닉네임에 쉼표가 있으면 줄바꿈으로 구분한다
+    namesEl.value = list.some((n) => n.includes(',')) ? list.join('\n') : list.join(', ');
+    updateCount();
+  }
+
+  function updateCount() {
+    $('#count').textContent = parseNames(namesEl.value).length;
+  }
+
+  function setStatus(text, isError = false) {
+    $('#statusText').textContent = text;
+    $('#status').classList.toggle('error', isError);
+  }
+
+  // 작성자 제외, 같은 사람은 한 번만, 댓글 중 하나라도 키워드가 있으면 참여
+  function selectParticipants(comments) {
+    const sorted = [...comments].sort((a, b) => a.order - b.order);
+    const people = new Map();
+    sorted.forEach((c, i) => {
+      if (!c.name || c.isAuthor || c.name === AUTHOR) return;
+      const key = c.memberId || c.name;
+      const person = people.get(key) || { name: c.name, texts: [], hitAt: 0 };
+      person.texts.push(c.text);
+      if (!person.hitAt && KEYWORD.test(c.text.replace(/\s+/g, ''))) person.hitAt = i + 1;
+      people.set(key, person);
+    });
+    const everyone = [...people.values()];
+    return {
+      joined: everyone.filter((p) => p.hitAt).sort((a, b) => a.hitAt - b.hitAt),
+      excluded: everyone.filter((p) => !p.hitAt),
+    };
+  }
+
+  function applyComments(comments) {
+    const { joined, excluded } = selectParticipants(comments);
+    commentOrder = new Map(joined.map((p) => [p.name, p.hitAt]));
+    setNames(joined.map((p) => p.name));
+
+    const list = $('#excluded');
+    list.replaceChildren(...excluded.map((p) => {
+      const li = document.createElement('li');
+      const b = document.createElement('b');
+      b.textContent = p.name;
+      li.append(b, p.texts.join(' / '));
+      return li;
+    }));
+    $('#excludedCount').textContent = `${excluded.length}명`;
+    $('#excludedBox').hidden = excluded.length === 0;
+  }
+
+  /* ---------- 에펨코리아에서 불러오기 ---------- */
+
+  function readComment(li) {
+    const plate = li.querySelector('.meta .member_plate') || li.querySelector('.meta a');
+    const body = li.querySelector('.xe_content')?.cloneNode(true);
+    body?.querySelectorAll('a.findParent').forEach((a) => a.remove()); // 답글 앞에 붙는 상대 닉네임
+    return {
+      order: Number(li.id.replace('comment_', '')),
+      memberId: plate?.className.match(/member_(\d+)/)?.[1] || null,
+      name: plate?.textContent.trim() || '',
+      text: body?.textContent.trim() || '',
+      isAuthor: !!li.querySelector('.comment-content.document_writer'),
+    };
+  }
+
+  async function fetchComments() {
+    const byId = new Map();
+    // 댓글 페이지를 차례로 읽다가 새 댓글이 없는 페이지가 나오면 멈춘다
+    for (let page = 1; page <= 30; page++) {
+      const url = `https://www.fmkorea.com/index.php?document_srl=${POST_ID}&cpage=${page}`;
+      const res = await fetch(url, { credentials: 'omit', cache: 'no-store' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
+      if (page === 1 && !doc.querySelector('.rd_body')) throw new Error('글 내용을 찾지 못했어요');
+      let added = 0;
+      for (const li of doc.querySelectorAll('li.fdb_itm[id^="comment_"]')) {
+        if (byId.has(li.id)) continue;
+        byId.set(li.id, readComment(li));
+        added++;
+      }
+      if (!added) break;
+    }
+    return [...byId.values()];
+  }
+
+  async function loadFromSite() {
+    reloadBtn.disabled = true;
+    setStatus('에펨코리아 댓글을 불러오는 중…');
+    try {
+      const comments = await fetchComments();
+      applyComments(comments);
+      const time = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      setStatus(`댓글 ${comments.length}개 확인 · ${time} 기준 · 작성자·중복 제외`);
+    } catch (err) {
+      setStatus(`댓글을 자동으로 불러오지 못했어요 (${err.message}). 아래에서 직접 붙여넣어 주세요.`, true);
+      $('#pasteBox').open = true;
+      updateCount();
+    } finally {
+      reloadBtn.disabled = false;
+    }
+  }
+
+  /* ---------- 직접 붙여넣기 ---------- */
+
+  // "닉네임 6 분 전" / "* [닉네임](링크) 6 분 전" / "닉네임 2026.09.19 12:38" 형태의 줄을 댓글 시작으로 본다
+  const HEAD = /^(?:[*•-]\s*)?(.+?)\s+(\d+\s*(?:초|분|시간|일)\s*전|\d{2,4}[.-]\d{1,2}[.-]\d{1,2}(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?)$/;
+  // 추천 수·수정·삭제·댓글 버튼 같은 줄
+  const NOISE = /^(?:\d+\s*)?(?:수정\s*)?(?:삭제\s*)?(?:댓글|신고)?$|^댓글\s*\d+\s*개$/;
+  const MD_LINK = /\[([^\]]*)\]\([^)]*\)/g;
+
+  function parsePasted(raw) {
+    const comments = [];
+    let current = null;
+    for (const rawLine of raw.split(/\r?\n/)) {
+      const line = rawLine.trim();
+      const plain = line.replace(MD_LINK, '$1');
+      if (!plain) continue;
+      const head = plain.match(HEAD);
+      if (head) {
+        current = { name: head[1].trim(), text: '', order: comments.length, memberId: null, isAuthor: false };
+        comments.push(current);
+        continue;
+      }
+      if (!current || NOISE.test(plain)) continue;
+      const body = line.replace(/^\[[^\]]*\]\([^)]*#comment_\d+\)\s*/, '').replace(MD_LINK, '$1');
+      current.text += (current.text ? ' ' : '') + body;
+    }
+    return comments;
+  }
+
+  $('#parseRaw').addEventListener('click', () => {
+    const comments = parsePasted($('#raw').value);
+    if (!comments.length) {
+      setStatus('붙여넣은 내용에서 댓글을 찾지 못했어요.', true);
+      return;
+    }
+    applyComments(comments);
+    setStatus(`붙여넣은 댓글 ${comments.length}개로 명단을 만들었어요 · 작성자·중복 제외`);
+  });
+
+  /* ---------- 추첨 ---------- */
+
+  // 0 이상 n 미만의 치우침 없는 난수
+  function randomInt(n) {
+    const limit = Math.floor(0x100000000 / n) * n;
+    const buf = new Uint32Array(1);
+    do crypto.getRandomValues(buf); while (buf[0] >= limit);
+    return buf[0] % n;
+  }
+
+  function pick(list, k) {
+    const a = [...list];
+    for (let i = 0; i < k; i++) {
+      const j = i + randomInt(a.length - i);
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a.slice(0, k);
+  }
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  function winnerCard(rank, name, listPos) {
+    const card = document.createElement('div');
+    card.className = 'win';
+    const at = commentOrder.get(name);
+    for (const [cls, text] of [
+      ['rank', `추첨 ${rank}위`],
+      ['nm', name],
+      ['pos', at ? `전체 댓글 중 ${at}번째` : `참여 명단 ${listPos}번째`],
+    ]) {
+      const el = document.createElement(cls === 'nm' ? 'strong' : 'span');
+      el.className = cls;
+      el.textContent = text;
+      card.append(el);
+    }
+    return card;
+  }
+
+  drawBtn.addEventListener('click', async () => {
+    const names = parseNames(namesEl.value);
+    if (!names.length) {
+      setStatus('참여자가 없어요. 명단을 먼저 채워 주세요.', true);
+      return;
+    }
+    const k = Math.min(Number($('#size').value), names.length);
+    const winners = pick(names.map((name, i) => ({ name, pos: i + 1 })), k);
+
+    drawBtn.disabled = true;
+    reloadBtn.disabled = true;
+    resultsEl.replaceChildren();
+    $('#drawnAt').textContent = '';
+
+    for (const [i, w] of winners.entries()) {
+      resultsEl.append(winnerCard(i + 1, w.name, w.pos));
+      await sleep(450);
+    }
+
+    const stamp = new Date().toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'medium' });
+    $('#drawnAt').textContent = `${stamp} 추첨 · 참여 ${names.length}명 중 ${k}명`;
+    drawBtn.disabled = false;
+    reloadBtn.disabled = false;
+  });
+
+  namesEl.addEventListener('input', updateCount);
+  reloadBtn.addEventListener('click', loadFromSite);
+
+  loadFromSite();
+</script>
+</body>
+</html>
