@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>FC 안양 댓글 추첨</title>
-<meta name="description" content="에펨코리아 '안양만세' 댓글 작성자 중 메가커피 당첨자를 추첨합니다.">
+<meta name="description" content="에펨코리아 글의 댓글 작성자 중에서 당첨자를 추첨합니다.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
@@ -22,6 +22,7 @@
     --field-line: #cdb72c;
     --purple: #4a0a8c;
     --purple-line: #8a5ccc;
+    --link: #cdb8ec;
     --danger: #ff8a8a;
   }
   * { box-sizing: border-box; }
@@ -51,7 +52,32 @@
     letter-spacing: -.5px;
     text-shadow: 0 0 14px rgba(255, 214, 0, .55);
   }
-  .sub { margin: 8px 0 0; text-align: center; font-size: 13px; color: #d9d2e0; }
+  .sub { margin: 8px 0 0; text-align: center; font-size: 13px; color: #d9d2e0; word-break: keep-all; }
+
+  /* 설정 */
+  .settings { margin: 14px auto 0; font-size: 12.5px; }
+  .settings > summary {
+    list-style: none; display: flex; justify-content: center; align-items: center; gap: 8px;
+    cursor: pointer; color: var(--muted);
+  }
+  .settings > summary::-webkit-details-marker { display: none; }
+  .post-chip { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #d9d2e0; }
+  .edit { flex: none; color: var(--link); text-decoration: underline; text-underline-offset: 2px; }
+  .settings form {
+    margin-top: 12px; display: grid; gap: 12px; text-align: left;
+    background: #16101c; border: 1px solid var(--panel-line); border-radius: 10px; padding: 14px;
+  }
+  .field { display: grid; gap: 4px; }
+  .field > span { font-size: 12.5px; font-weight: 500; color: #e6e0ec; }
+  .field input {
+    width: 100%; background: var(--field); color: #e9e3d3; border: 1px solid var(--purple-line); border-radius: 6px;
+    padding: 8px 10px; font-family: inherit; font-size: 13px;
+  }
+  .field input:focus { outline: none; border-color: var(--gold); }
+  .field small { font-size: 11.5px; color: var(--muted); line-height: 1.5; }
+  .form-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .form-error { font-size: 12px; color: var(--danger); }
+
   .count { margin: 20px 0 10px; text-align: center; color: var(--gold); font-weight: 700; font-size: 15px; }
 
   textarea {
@@ -76,7 +102,7 @@
   }
   .status.error { color: var(--danger); }
   .linkish {
-    background: none; border: 0; padding: 0; font: inherit; color: #cdb8ec;
+    background: none; border: 0; padding: 0; font: inherit; color: var(--link);
     text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
   }
   .linkish:disabled { opacity: .5; cursor: default; }
@@ -116,9 +142,9 @@
   .drawn-at { margin-top: 14px; text-align: center; font-size: 12px; color: var(--muted); }
   .drawn-at:empty { display: none; }
 
-  details { margin-top: 18px; font-size: 13px; color: #d9d2e0; }
-  details + details { margin-top: 8px; }
-  summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
+  .more { margin-top: 18px; font-size: 13px; color: #d9d2e0; }
+  .more + .more { margin-top: 8px; }
+  .more > summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
   .excluded { margin: 8px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; }
   .excluded li { background: #16101c; border-radius: 6px; padding: 6px 10px; font-size: 12px; color: #bfb3cc; }
   .excluded b { color: #efe8f6; margin-right: 6px; }
@@ -128,6 +154,8 @@
     margin-top: 8px; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--purple-line);
     background: var(--purple); color: #fff; font-family: inherit; font-size: 13px; cursor: pointer;
   }
+  .form-actions .secondary { margin-top: 0; }
+  .secondary:disabled { opacity: .6; cursor: default; }
 
   @media (max-width: 520px) {
     body { padding: 16px 12px 36px; }
@@ -143,7 +171,33 @@
 <body>
   <main class="panel">
     <h1>FC 안양 팬 댓글 당첨자 추첨</h1>
-    <p class="sub">'안양만세' 댓글 중 영광의 당첨자를 선정합니다</p>
+    <p class="sub" id="sub"></p>
+
+    <details class="settings" id="settings">
+      <summary><span class="post-chip" id="postChip">게시글 불러오는 중…</span><span class="edit">설정 변경</span></summary>
+      <form id="settingsForm" novalidate>
+        <label class="field">
+          <span>게시글 주소</span>
+          <input id="postInput" type="url" inputmode="url" autocomplete="off" placeholder="https://www.fmkorea.com/10351544409">
+          <small>에펨코리아 글 주소를 붙여넣으세요 (모바일 주소도 됩니다).</small>
+        </label>
+        <label class="field">
+          <span>필터 문구</span>
+          <input id="kwInput" type="text" autocomplete="off" placeholder="비워 두면 모든 댓글 작성자가 참여">
+          <small>이 문구가 들어간 댓글을 단 사람만 참여합니다. 쉼표로 여러 개 입력 가능.
+            띄어쓰기·반복 글자는 무시해요 (안양 만세, 안양만만세 → 인정).</small>
+        </label>
+        <label class="field">
+          <span>제외할 닉네임</span>
+          <input id="exInput" type="text" autocomplete="off" placeholder="쉼표로 구분">
+          <small>글 작성자는 자동으로 제외됩니다.</small>
+        </label>
+        <div class="form-actions">
+          <button class="secondary" id="apply" type="submit">적용하고 댓글 불러오기</button>
+          <span class="form-error" id="formError" role="alert"></span>
+        </div>
+      </form>
+    </details>
 
     <div class="count">현재 참여 인원 <span id="count">0</span>명</div>
     <textarea id="names" spellcheck="false" aria-label="참여자 명단 (쉼표로 구분)" placeholder="댓글을 불러오는 중…"></textarea>
@@ -168,37 +222,103 @@
     <div class="results" id="results" aria-live="polite"></div>
     <div class="drawn-at" id="drawnAt"></div>
 
-    <details id="excludedBox" hidden>
-      <summary>제외된 댓글 작성자 <span id="excludedCount"></span></summary>
+    <details class="more" id="excludedBox" hidden>
+      <summary>필터 문구가 없어 제외된 댓글 작성자 <span id="excludedCount"></span></summary>
       <ul class="excluded" id="excluded"></ul>
     </details>
 
-    <details id="pasteBox">
+    <details class="more" id="pasteBox">
       <summary>댓글 직접 붙여넣기 (자동 불러오기가 안 될 때)</summary>
       <p class="note">에펨코리아 글에서 댓글 영역을 전체 선택해 복사한 뒤 아래에 붙여넣고 <b>명단 만들기</b>를 누르세요.
-        작성자·중복은 빠지고 '안양만세'가 들어간 댓글을 단 사람만 명단에 들어갑니다.</p>
+        제외할 닉네임·중복은 빠지고, 필터 문구가 들어간 댓글을 단 사람만 명단에 들어갑니다.</p>
       <textarea id="raw" spellcheck="false" placeholder="온필드리뷰 6 분 전&#10;마감&#10;기이구 6 분 전&#10;안양만세&#10;…"></textarea>
       <button class="secondary" id="parseRaw" type="button">명단 만들기</button>
     </details>
   </main>
 
 <script>
-  const POST_ID = '10351544409';
-  const POST_URL = `https://www.fmkorea.com/${POST_ID}`;
-  const AUTHOR = '차짬';
-  // '안양만세', '안양만만세' 모두 인정. 띄어쓰기는 무시한다.
-  const KEYWORD = /안양만+세/;
+  const DEFAULTS = { post: '10351544409', kw: '안양만세', ex: '차짬' };
+  const STORE_KEY = 'fm-coffee-settings';
 
   const $ = (sel) => document.querySelector(sel);
   const namesEl = $('#names');
   const drawBtn = $('#draw');
   const reloadBtn = $('#reload');
+  const applyBtn = $('#apply');
   const resultsEl = $('#results');
 
+  let settings = loadSettings();
+  // 불러온 글의 작성자 ({ name, memberId })
+  let author = null;
   // 이름 → 전체 댓글 중 몇 번째 댓글로 참여했는지
   let commentOrder = new Map();
+  let loadSeq = 0;
 
-  $('#postLink').href = POST_URL;
+  /* ---------- 설정 ---------- */
+
+  // 주소창 값 > 이 브라우저에 저장된 값 > 기본값
+  function loadSettings() {
+    const query = new URLSearchParams(location.search);
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch { /* 저장소를 못 쓰면 기본값 */ }
+    const pick = (key) => query.get(key) ?? saved[key] ?? DEFAULTS[key];
+    return { post: parsePostId(pick('post')) || DEFAULTS.post, kw: pick('kw'), ex: pick('ex') };
+  }
+
+  function saveSettings() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(settings)); } catch { /* 무시 */ }
+    // 주소창에도 반영해서 이 링크를 그대로 공유·즐겨찾기 할 수 있게 한다
+    history.replaceState(null, '', `${location.pathname}?${new URLSearchParams(settings)}`);
+  }
+
+  // "https://www.fmkorea.com/123", "https://m.fmkorea.com/best/123", "...document_srl=123", "123" 모두 허용
+  function parsePostId(input) {
+    const s = String(input ?? '').trim();
+    const m = s.match(/document_srl=(\d+)/) || s.match(/(?:^|\/)(\d{5,})(?=[/?#]|$)/);
+    return m ? m[1] : null;
+  }
+
+  const postUrl = () => `https://www.fmkorea.com/${settings.post}`;
+  const splitList = (text) => text.split(',').map((s) => s.trim()).filter(Boolean);
+  // 띄어쓰기와 연달아 반복된 글자를 무시한다: "안양 만세", "안양만만세" → "안양만세"
+  const normalize = (s) => s.toLowerCase().replace(/\s+/g, '').replace(/(.)\1+/gu, '$1');
+
+  function keywordMatcher() {
+    const keywords = splitList(settings.kw).map(normalize).filter(Boolean);
+    if (!keywords.length) return () => true;
+    return (text) => {
+      const t = normalize(text);
+      return keywords.some((k) => t.includes(k));
+    };
+  }
+
+  function renderSettings() {
+    $('#postInput').value = postUrl();
+    $('#kwInput').value = settings.kw;
+    $('#exInput').value = settings.ex;
+    $('#postLink').href = postUrl();
+    const keywords = splitList(settings.kw);
+    $('#sub').textContent = keywords.length
+      ? `${keywords.map((k) => `'${k}'`).join(', ')} 댓글 중 영광의 당첨자를 선정합니다`
+      : '모든 댓글 중 영광의 당첨자를 선정합니다';
+  }
+
+  $('#settingsForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const post = parsePostId($('#postInput').value);
+    if (!post) {
+      $('#formError').textContent = '게시글 주소를 확인해 주세요. 예) https://www.fmkorea.com/10351544409';
+      return;
+    }
+    $('#formError').textContent = '';
+    settings = { post, kw: $('#kwInput').value.trim(), ex: $('#exInput').value.trim() };
+    saveSettings();
+    renderSettings();
+    resultsEl.replaceChildren();
+    $('#drawnAt').textContent = '';
+    $('#settings').open = false;
+    loadFromSite();
+  });
 
   /* ---------- 명단 ---------- */
 
@@ -222,16 +342,26 @@
     $('#status').classList.toggle('error', isError);
   }
 
-  // 작성자 제외, 같은 사람은 한 번만, 댓글 중 하나라도 키워드가 있으면 참여
+  function excludedNote() {
+    const names = new Set(splitList(settings.ex));
+    if (author?.name) names.add(author.name);
+    return names.size ? `${[...names].join(', ')}·중복 제외` : '중복 제외';
+  }
+
+  // 작성자·제외 닉네임은 빼고, 같은 사람은 한 번만, 댓글 중 하나라도 필터 문구가 있으면 참여
   function selectParticipants(comments) {
+    const matches = keywordMatcher();
+    const skip = new Set(splitList(settings.ex));
+    if (author?.name) skip.add(author.name);
     const sorted = [...comments].sort((a, b) => a.order - b.order);
     const people = new Map();
     sorted.forEach((c, i) => {
-      if (!c.name || c.isAuthor || c.name === AUTHOR) return;
+      if (!c.name || c.isAuthor || skip.has(c.name)) return;
+      if (author?.memberId && c.memberId === author.memberId) return;
       const key = c.memberId || c.name;
       const person = people.get(key) || { name: c.name, texts: [], hitAt: 0 };
       person.texts.push(c.text);
-      if (!person.hitAt && KEYWORD.test(c.text.replace(/\s+/g, ''))) person.hitAt = i + 1;
+      if (!person.hitAt && matches(c.text)) person.hitAt = i + 1;
       people.set(key, person);
     });
     const everyone = [...people.values()];
@@ -246,8 +376,7 @@
     commentOrder = new Map(joined.map((p) => [p.name, p.hitAt]));
     setNames(joined.map((p) => p.name));
 
-    const list = $('#excluded');
-    list.replaceChildren(...excluded.map((p) => {
+    $('#excluded').replaceChildren(...excluded.map((p) => {
       const li = document.createElement('li');
       const b = document.createElement('b');
       b.textContent = p.name;
@@ -273,15 +402,26 @@
     };
   }
 
-  async function fetchComments() {
+  async function fetchPost(postId) {
     const byId = new Map();
+    let title = '';
+    let writer = null;
     // 댓글 페이지를 차례로 읽다가 새 댓글이 없는 페이지가 나오면 멈춘다
     for (let page = 1; page <= 30; page++) {
-      const url = `https://www.fmkorea.com/index.php?document_srl=${POST_ID}&cpage=${page}`;
+      const url = `https://www.fmkorea.com/index.php?document_srl=${postId}&cpage=${page}`;
       const res = await fetch(url, { credentials: 'omit', cache: 'no-store' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
-      if (page === 1 && !doc.querySelector('.rd_body')) throw new Error('글 내용을 찾지 못했어요');
+      if (page === 1) {
+        const head = doc.querySelector('.rd_hd');
+        if (!head || !doc.querySelector('.rd_body')) throw new Error('글을 찾지 못했어요. 주소를 확인해 주세요');
+        title = head.querySelector('h1')?.textContent.trim() || doc.title;
+        const plate = head.querySelector('.member_plate');
+        writer = plate && {
+          name: plate.textContent.trim(),
+          memberId: plate.className.match(/member_(\d+)/)?.[1] || null,
+        };
+      }
       let added = 0;
       for (const li of doc.querySelectorAll('li.fdb_itm[id^="comment_"]')) {
         if (byId.has(li.id)) continue;
@@ -290,23 +430,31 @@
       }
       if (!added) break;
     }
-    return [...byId.values()];
+    return { title, writer, comments: [...byId.values()] };
   }
 
   async function loadFromSite() {
+    const seq = ++loadSeq;
     reloadBtn.disabled = true;
+    author = null;
     setStatus('에펨코리아 댓글을 불러오는 중…');
     try {
-      const comments = await fetchComments();
+      const { title, writer, comments } = await fetchPost(settings.post);
+      if (seq !== loadSeq) return; // 그사이 다른 글을 불러오기 시작함
+      author = writer;
+      $('#postChip').textContent = title;
+      $('#postChip').title = title;
       applyComments(comments);
       const time = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      setStatus(`댓글 ${comments.length}개 확인 · ${time} 기준 · 작성자·중복 제외`);
+      setStatus(`댓글 ${comments.length}개 확인 · ${time} 기준 · ${excludedNote()}`);
     } catch (err) {
+      if (seq !== loadSeq) return;
+      $('#postChip').textContent = '게시글을 불러오지 못했어요';
       setStatus(`댓글을 자동으로 불러오지 못했어요 (${err.message}). 아래에서 직접 붙여넣어 주세요.`, true);
       $('#pasteBox').open = true;
       updateCount();
     } finally {
-      reloadBtn.disabled = false;
+      if (seq === loadSeq) reloadBtn.disabled = false;
     }
   }
 
@@ -345,7 +493,7 @@
       return;
     }
     applyComments(comments);
-    setStatus(`붙여넣은 댓글 ${comments.length}개로 명단을 만들었어요 · 작성자·중복 제외`);
+    setStatus(`붙여넣은 댓글 ${comments.length}개로 명단을 만들었어요 · ${excludedNote()}`);
   });
 
   /* ---------- 추첨 ---------- */
@@ -395,8 +543,7 @@
     const k = Math.min(Number($('#size').value), names.length);
     const winners = pick(names.map((name, i) => ({ name, pos: i + 1 })), k);
 
-    drawBtn.disabled = true;
-    reloadBtn.disabled = true;
+    drawBtn.disabled = reloadBtn.disabled = applyBtn.disabled = true;
     resultsEl.replaceChildren();
     $('#drawnAt').textContent = '';
 
@@ -407,13 +554,13 @@
 
     const stamp = new Date().toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'medium' });
     $('#drawnAt').textContent = `${stamp} 추첨 · 참여 ${names.length}명 중 ${k}명`;
-    drawBtn.disabled = false;
-    reloadBtn.disabled = false;
+    drawBtn.disabled = reloadBtn.disabled = applyBtn.disabled = false;
   });
 
   namesEl.addEventListener('input', updateCount);
   reloadBtn.addEventListener('click', loadFromSite);
 
+  renderSettings();
   loadFromSite();
 </script>
 </body>
