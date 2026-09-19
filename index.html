@@ -163,12 +163,22 @@
   .form-actions .secondary { margin-top: 0; }
   .secondary:disabled { opacity: .6; cursor: default; }
 
-  .rec-row { display: flex; align-items: center; justify-content: center; gap: 4px 10px; flex-wrap: wrap; margin-top: 12px; }
+  .rec-row {
+    display: flex; align-items: center; justify-content: center; gap: 4px 10px; flex-wrap: wrap;
+    margin-top: 12px; text-align: center;
+  }
   .rec-row[hidden] { display: none; }
   .rec-row .secondary { margin-top: 0; }
   .rec-hint { font-size: 12px; color: var(--muted); }
   /* 녹화 영상에는 녹화 버튼과 펼친 패널이 나오지 않게 한다 */
   body.recording .rec-row { visibility: hidden; }
+  .rec-result { margin-top: 16px; display: grid; gap: 8px; justify-items: center; }
+  .rec-result[hidden] { display: none; }
+  .rec-result video {
+    width: 100%; max-width: 420px; border-radius: 8px; background: #000; border: 1px solid var(--panel-line);
+  }
+  .rec-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  .rec-actions .secondary { margin-top: 0; display: inline-block; text-decoration: none; }
 
   @media (max-width: 520px) {
     body { padding: 16px 12px 36px; }
@@ -240,6 +250,14 @@
 
     <div class="results" id="results" aria-live="polite"></div>
     <div class="drawn-at" id="drawnAt"></div>
+
+    <div class="rec-result" id="recResult" hidden>
+      <video id="recVideo" controls playsinline muted loop></video>
+      <div class="rec-actions">
+        <a class="secondary" id="recSave" href="#" download>영상 저장</a>
+        <button class="secondary" id="recShare" type="button" hidden>공유 · 사진에 저장</button>
+      </div>
+    </div>
 
     <details class="more" id="excludedBox" hidden>
       <summary>필터 문구가 없어 제외된 댓글 작성자 <span id="excludedCount"></span></summary>
@@ -536,16 +554,33 @@
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-  function winnerCard(rank, name, listPos) {
+  // 추첨 연출 타이밍 (화면과 영상이 같은 값을 쓴다)
+  const LEAD_MS = 1200; // 녹화 시작 후 첫 카드까지
+  const STEP_MS = 450; // 카드 사이 간격
+  const POP_MS = 550; // 카드 등장 애니메이션 길이 (CSS .win 과 같게)
+  const HOLD_MS = 2500; // 마지막 결과를 보여 주는 시간
+
+  // 당첨자는 여기서 한 번만 뽑고, 화면과 영상 모두 이 결과를 그대로 보여 준다
+  function makeDraw() {
+    const names = parseNames(namesEl.value);
+    const k = Math.min(Number($('#size').value), names.length);
+    const winners = pick(names.map((name, i) => ({ name, listPos: i + 1 })), k).map((w, i) => {
+      const at = commentOrder.get(w.name);
+      return {
+        rank: `추첨 ${i + 1}위`,
+        name: w.name,
+        pos: at ? `전체 댓글 중 ${at}번째` : `참여 명단 ${w.listPos}번째`,
+      };
+    });
+    const when = new Date().toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'medium' });
+    return { names, winners, stamp: `${when} 추첨 · 참여 ${names.length}명 중 ${k}명` };
+  }
+
+  function winnerCard(w) {
     const card = document.createElement('div');
     card.className = 'win';
-    const at = commentOrder.get(name);
-    for (const [cls, text] of [
-      ['rank', `추첨 ${rank}위`],
-      ['nm', name],
-      ['pos', at ? `전체 댓글 중 ${at}번째` : `참여 명단 ${listPos}번째`],
-    ]) {
-      const el = document.createElement(cls === 'nm' ? 'strong' : 'span');
+    for (const [cls, tag, text] of [['rank', 'span', w.rank], ['nm', 'strong', w.name], ['pos', 'span', w.pos]]) {
+      const el = document.createElement(tag);
       el.className = cls;
       el.textContent = text;
       card.append(el);
@@ -553,7 +588,20 @@
     return card;
   }
 
-  const busyButtons = [drawBtn, reloadBtn, applyBtn, $('#recDraw')];
+  async function showDraw(draw) {
+    resultsEl.replaceChildren();
+    $('#drawnAt').textContent = '';
+    for (const w of draw.winners) {
+      const card = winnerCard(w);
+      resultsEl.append(card);
+      card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      await sleep(STEP_MS);
+    }
+    $('#drawnAt').textContent = draw.stamp;
+  }
+
+  const recBtn = $('#recDraw');
+  const busyButtons = [drawBtn, reloadBtn, applyBtn, recBtn];
   const setBusy = (busy) => busyButtons.forEach((b) => { b.disabled = busy; });
 
   function hasParticipants() {
@@ -562,57 +610,76 @@
     return false;
   }
 
-  async function runDraw() {
-    const names = parseNames(namesEl.value);
-    const k = Math.min(Number($('#size').value), names.length);
-    const winners = pick(names.map((name, i) => ({ name, pos: i + 1 })), k);
-
-    resultsEl.replaceChildren();
-    $('#drawnAt').textContent = '';
-
-    for (const [i, w] of winners.entries()) {
-      const card = winnerCard(i + 1, w.name, w.pos);
-      resultsEl.append(card);
-      card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      await sleep(450);
-    }
-
-    const stamp = new Date().toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'medium' });
-    $('#drawnAt').textContent = `${stamp} 추첨 · 참여 ${names.length}명 중 ${k}명`;
-  }
-
   drawBtn.addEventListener('click', async () => {
     if (!hasParticipants()) return;
     setBusy(true);
-    await runDraw();
+    $('#recResult').hidden = true;
+    await showDraw(makeDraw());
     setBusy(false);
   });
 
-  /* ---------- 녹화하며 추첨 ---------- */
+  /* ---------- 녹화하며 추첨 ----------
+     PC 크롬: 지금 탭을 그대로 녹화한다.
+     폰처럼 화면 녹화가 안 되는 브라우저: 같은 추첨 결과를 캔버스에 그려 영상으로 만든다. */
 
-  const canRecord = !!navigator.mediaDevices?.getDisplayMedia && typeof MediaRecorder !== 'undefined';
-  $('#recRow').hidden = !canRecord;
+  const canCaptureCanvas = typeof HTMLCanvasElement.prototype.captureStream === 'function';
+  $('#recRow').hidden = typeof MediaRecorder === 'undefined'
+    || !(navigator.mediaDevices?.getDisplayMedia || canCaptureCanvas);
+
+  const setRecHint = (text) => { $('#recHint').textContent = text; };
+  const sizeLabel = (blob) => (blob.size < 1048576
+    ? `${Math.ceil(blob.size / 1024)}KB`
+    : `${(blob.size / 1048576).toFixed(1)}MB`);
 
   function recorderType() {
     return ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm']
       .find((t) => MediaRecorder.isTypeSupported(t)) || '';
   }
 
-  function saveFile(blob, ext) {
+  function fileName(ext) {
     const d = new Date();
     const p = (n) => String(n).padStart(2, '0');
-    const name = `추첨_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.${ext}`;
+    return `추첨_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.${ext}`;
+  }
+
+  function saveFile(blob, name) {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = name;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 60_000);
-    return name;
   }
 
-  // 지금 탭을 녹화하면서 추첨하고, 끝나면 영상 파일(mp4, 안 되면 webm)로 저장한다
-  $('#recDraw').addEventListener('click', async () => {
+  // stream 을 녹화하는 동안 run() 을 실행하고, 끝나면 영상 파일(mp4, 안 되면 webm)을 돌려준다
+  async function record(stream, run) {
+    const type = recorderType();
+    const recorder = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 6_000_000 });
+    const chunks = [];
+    recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+    const stopped = new Promise((resolve) => { recorder.onstop = resolve; });
+    const stop = () => { if (recorder.state !== 'inactive') recorder.stop(); };
+    stream.getVideoTracks()[0].addEventListener('ended', stop); // 크롬의 "공유 중지"를 누른 경우
+
+    recorder.start();
+    try {
+      await run();
+    } finally {
+      stop();
+      await stopped;
+      stream.getTracks().forEach((t) => t.stop());
+    }
+    const ext = type.includes('mp4') ? 'mp4' : 'webm';
+    return { blob: new Blob(chunks, { type: type.split(';')[0] || 'video/webm' }), name: fileName(ext) };
+  }
+
+  recBtn.addEventListener('click', () => {
     if (!hasParticipants()) return;
+    $('#recResult').hidden = true;
+    if (navigator.mediaDevices?.getDisplayMedia) recordTab();
+    else recordCanvas();
+  });
+
+  async function recordTab() {
     let stream;
     try {
       stream = await navigator.mediaDevices.getDisplayMedia({
@@ -622,8 +689,12 @@
         selfBrowserSurface: 'include',
         surfaceSwitching: 'exclude',
       });
-    } catch {
-      $('#recHint').textContent = '녹화가 취소됐어요. 창에서 "허용"(이 탭 공유)을 눌러야 녹화돼요.';
+    } catch (err) {
+      if (err.name === 'NotAllowedError') {
+        setRecHint('녹화가 취소됐어요. 창에서 "허용"(이 탭 공유)을 눌러야 녹화돼요.');
+        return;
+      }
+      recordCanvas(); // 화면 녹화를 지원하지 않는 환경
       return;
     }
 
@@ -631,35 +702,369 @@
     document.body.classList.add('recording');
     document.querySelectorAll('details[open]').forEach((d) => { d.open = false; });
     window.scrollTo(0, 0);
-
     try {
-      const type = recorderType();
-      const recorder = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 6_000_000 });
-      const chunks = [];
-      recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
-      const stopped = new Promise((resolve) => { recorder.onstop = resolve; });
-      const stop = () => { if (recorder.state !== 'inactive') recorder.stop(); };
-      stream.getVideoTracks()[0].addEventListener('ended', stop); // 크롬의 "공유 중지"를 누른 경우
-
-      recorder.start();
-      await sleep(1200);
-      await runDraw();
-      await sleep(2500);
-      stop();
-      await stopped;
-
-      const blob = new Blob(chunks, { type: type.split(';')[0] || 'video/webm' });
-      const name = saveFile(blob, type.includes('mp4') ? 'mp4' : 'webm');
-      const size = blob.size < 1048576 ? `${Math.ceil(blob.size / 1024)}KB` : `${(blob.size / 1048576).toFixed(1)}MB`;
-      $('#recHint').textContent = `저장했어요: ${name} (${size}) · 다운로드 폴더를 확인하세요`;
+      const { blob, name } = await record(stream, async () => {
+        await sleep(LEAD_MS);
+        await showDraw(makeDraw());
+        await sleep(HOLD_MS);
+      });
+      saveFile(blob, name);
+      setRecHint(`저장했어요: ${name} (${sizeLabel(blob)}) · 다운로드 폴더를 확인하세요`);
     } catch (err) {
-      $('#recHint').textContent = `녹화에 실패했어요 (${err.message})`;
+      setRecHint(`녹화에 실패했어요 (${err.message})`);
     } finally {
-      stream.getTracks().forEach((t) => t.stop());
       document.body.classList.remove('recording');
       setBusy(false);
     }
-  });
+  }
+
+  async function recordCanvas() {
+    if (!canCaptureCanvas) {
+      setRecHint('이 브라우저에서는 영상 저장을 지원하지 않아요. 휴대폰의 화면 녹화를 이용해 주세요.');
+      return;
+    }
+    setBusy(true);
+    setRecHint('추첨 영상을 만드는 중…');
+    try {
+      const draw = makeDraw();
+      const video = await buildDrawVideo(draw);
+      const { blob, name } = await record(video.canvas.captureStream(30), async () => {
+        const start = performance.now();
+        const onScreen = sleep(LEAD_MS).then(() => showDraw(draw));
+        // requestAnimationFrame 은 화면이 가려지면 멈추므로 타이머로 30fps 를 그린다
+        await new Promise((resolve) => {
+          const frame = () => {
+            const t = performance.now() - start;
+            video.paint(t);
+            if (t >= video.duration) resolve();
+            else setTimeout(frame, 1000 / 30);
+          };
+          frame();
+        });
+        await onScreen;
+      });
+      showRecording(blob, name);
+    } catch (err) {
+      setRecHint(`영상을 만들지 못했어요 (${err.message})`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  let recordingUrl = null;
+
+  // 폰에서는 바로 다운로드하는 대신 미리보기와 저장·공유 버튼을 보여 준다
+  function showRecording(blob, name) {
+    if (recordingUrl) URL.revokeObjectURL(recordingUrl);
+    recordingUrl = URL.createObjectURL(blob);
+    $('#recVideo').src = recordingUrl;
+    const save = $('#recSave');
+    save.href = recordingUrl;
+    save.download = name;
+
+    const file = new File([blob], name, { type: blob.type });
+    const share = $('#recShare');
+    share.hidden = !navigator.canShare?.({ files: [file] });
+    share.onclick = () => navigator.share({ files: [file] }).catch(() => { /* 공유 창을 닫음 */ });
+
+    $('#recResult').hidden = false;
+    $('#recResult').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    setRecHint(`추첨 영상이 만들어졌어요 (${sizeLabel(blob)}). 아래에서 저장하거나 공유하세요.`);
+  }
+
+  /* ---------- 캔버스로 추첨 영상 그리기 (폰용) ---------- */
+
+  const FONT_STACK = '"Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif';
+  const font = (weight, size) => `${weight} ${size}px ${FONT_STACK}`;
+
+  function roundRect(c, x, y, w, h, r) {
+    c.beginPath();
+    c.moveTo(x + r, y);
+    c.arcTo(x + w, y, x + w, y + h, r);
+    c.arcTo(x + w, y + h, x, y + h, r);
+    c.arcTo(x, y + h, x, y, r);
+    c.arcTo(x, y, x + w, y, r);
+    c.closePath();
+  }
+
+  // 글자가 maxW 안에 들어갈 때까지 글꼴 크기를 줄인다
+  function fitFont(c, weight, size, text, maxW) {
+    let s = size;
+    c.font = font(weight, s);
+    while (s > 8 && c.measureText(text).width > maxW) {
+      s -= 0.5;
+      c.font = font(weight, s);
+    }
+  }
+
+  function ellipsize(c, text, maxW) {
+    if (c.measureText(text).width <= maxW) return text;
+    let s = text;
+    while (s && c.measureText(`${s}…`).width > maxW) s = s.slice(0, -1);
+    return `${s}…`;
+  }
+
+  // 명단을 "닉네임, " 단위로 줄바꿈한다 (한 닉네임이 한 줄보다 길면 글자 단위로)
+  function wrapNames(c, names, maxW) {
+    const lines = [];
+    let line = '';
+    names.forEach((n, i) => {
+      const token = i < names.length - 1 ? `${n}, ` : n;
+      if (c.measureText(line + token).width <= maxW) {
+        line += token;
+        return;
+      }
+      if (line) lines.push(line.trimEnd());
+      line = '';
+      for (const ch of token) {
+        if (line && c.measureText(line + ch).width > maxW) {
+          lines.push(line);
+          line = '';
+        }
+        line += ch;
+      }
+    });
+    if (line) lines.push(line.trimEnd());
+    return lines;
+  }
+
+  // CSS 의 cubic-bezier(.2, .9, .3, 1.25) 처럼 살짝 튀어나왔다 돌아오는 움직임
+  const easeOutBack = (x) => 1 + 2.7 * (x - 1) ** 3 + 1.7 * (x - 1) ** 2;
+
+  async function buildDrawVideo(draw) {
+    const W = 540; // 논리 폭. 실제 영상은 S배 (1080px)
+    const S = 2;
+    const M = 16;
+    const PAD = 24;
+    const innerX = M + PAD;
+    const innerW = W - (M + PAD) * 2;
+
+    const title = $('h1').textContent;
+    const sub = $('#sub').textContent;
+    const post = $('#postChip').textContent;
+    const count = `현재 참여 인원 ${draw.names.length}명`;
+    const sizeText = $('#size').selectedOptions[0].textContent;
+
+    // 한글 웹폰트는 글자 범위별 조각으로 나뉘어 있어서, 영상에 쓸 글자가 든 조각을 미리 불러 둔다
+    const allText = [title, sub, post, count, sizeText, '당첨 인원 선택 추첨', draw.stamp, ...draw.names,
+      ...draw.winners.flatMap((w) => [w.rank, w.name, w.pos])].join('');
+    await Promise.race([
+      Promise.all([400, 500, 700, 900].map((w) => document.fonts.load(font(w, 16), allText))).catch(() => {}),
+      sleep(3000),
+    ]);
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+
+    // 세로 배치 계산 (논리 좌표)
+    ctx.font = font(400, 12.5);
+    let nameLines = wrapNames(ctx, draw.names, innerW - 24);
+    const MAX_LINES = 6;
+    if (nameLines.length > MAX_LINES) {
+      nameLines = nameLines.slice(0, MAX_LINES);
+      let last = nameLines[MAX_LINES - 1];
+      while (last && ctx.measureText(`${last} …`).width > innerW - 24) last = last.slice(0, -1);
+      nameLines[MAX_LINES - 1] = `${last} …`;
+    }
+
+    let y = M + PAD;
+    const emblemY = y; y += 76 + 12;
+    const titleY = y; y += 40;
+    const subY = y; y += 24;
+    const postY = y; y += 30;
+    const countY = y; y += 30;
+    const boxY = y;
+    const boxH = Math.max(3, nameLines.length) * 20 + 20;
+    y += boxH + 22;
+    const controlsY = y; y += 40 + 24;
+
+    const k = draw.winners.length;
+    const cols = k === 4 ? 2 : Math.min(3, k);
+    const GAP = 10;
+    const CW = (innerW - GAP * 2) / 3;
+    const CH = 74;
+    const cards = draw.winners.map((w, i) => {
+      const row = Math.floor(i / cols);
+      const inRow = Math.min(cols, k - row * cols);
+      const rowW = inRow * CW + (inRow - 1) * GAP;
+      return { ...w, x: W / 2 - rowW / 2 + (i % cols) * (CW + GAP), y: y + row * (CH + GAP), at: LEAD_MS + i * STEP_MS };
+    });
+    y += Math.ceil(k / cols) * (CH + GAP) - GAP + 14;
+    const stampY = y; y += 16 + PAD;
+    const panelH = y - M;
+    const H = y + M;
+
+    canvas.width = W * S;
+    canvas.height = Math.ceil((H * S) / 2) * 2; // 영상 코덱은 짝수 크기를 좋아한다
+
+    // 움직이지 않는 부분은 한 번만 그려 둔다
+    const still = document.createElement('canvas');
+    still.width = canvas.width;
+    still.height = canvas.height;
+    const b = still.getContext('2d');
+    b.scale(S, S);
+    b.fillStyle = '#260046';
+    b.fillRect(0, 0, W, canvas.height / S);
+
+    b.save();
+    b.shadowColor = 'rgba(0, 0, 0, .35)';
+    b.shadowBlur = 40 * S;
+    b.shadowOffsetY = 12 * S;
+    roundRect(b, M, M, W - M * 2, panelH, 14);
+    b.fillStyle = '#1e1526';
+    b.fill();
+    b.restore();
+    b.lineWidth = 1;
+    b.strokeStyle = '#3b2c49';
+    roundRect(b, M + 0.5, M + 0.5, W - M * 2 - 1, panelH - 1, 14);
+    b.stroke();
+
+    const emblem = $('.emblem');
+    if (emblem.complete && emblem.naturalWidth) {
+      b.save();
+      b.shadowColor = 'rgba(255, 214, 0, .35)';
+      b.shadowBlur = 12 * S;
+      b.drawImage(emblem, W / 2 - 38, emblemY, 76, 76);
+      b.restore();
+    }
+
+    b.textAlign = 'center';
+    b.textBaseline = 'top';
+    b.save();
+    fitFont(b, 900, 26, title, innerW);
+    b.fillStyle = '#ffe600';
+    b.shadowColor = 'rgba(255, 214, 0, .55)';
+    b.shadowBlur = 14 * S;
+    b.fillText(title, W / 2, titleY);
+    b.restore();
+
+    fitFont(b, 400, 13, sub, innerW);
+    b.fillStyle = '#d9d2e0';
+    b.fillText(sub, W / 2, subY);
+
+    b.font = font(400, 12);
+    b.fillStyle = '#a99bb8';
+    b.fillText(ellipsize(b, post, innerW), W / 2, postY);
+
+    b.font = font(700, 15);
+    b.fillStyle = '#ffe600';
+    b.fillText(count, W / 2, countY);
+
+    roundRect(b, innerX, boxY, innerW, boxH, 8);
+    b.fillStyle = '#131115';
+    b.fill();
+    b.lineWidth = 2;
+    b.strokeStyle = '#cdb72c';
+    b.stroke();
+    b.textAlign = 'left';
+    b.font = font(400, 12.5);
+    b.fillStyle = '#e9e3d3';
+    nameLines.forEach((line, i) => b.fillText(line, innerX + 12, boxY + 12 + i * 20));
+
+    // 당첨 인원 선택 [3명] (추첨)
+    b.font = font(400, 14);
+    const labelW = b.measureText('당첨 인원 선택').width;
+    const selW = 64;
+    const btnW = 108;
+    let x = W / 2 - (labelW + 8 + selW + 14 + btnW) / 2;
+    const midY = controlsY + 20;
+    b.textBaseline = 'middle';
+    b.fillStyle = '#e6e0ec';
+    b.fillText('당첨 인원 선택', x, midY);
+    x += labelW + 8;
+    roundRect(b, x, midY - 15, selW, 30, 5);
+    b.fillStyle = '#4a0a8c';
+    b.fill();
+    b.lineWidth = 1;
+    b.strokeStyle = '#8a5ccc';
+    b.stroke();
+    b.fillStyle = '#fff';
+    b.fillText(sizeText, x + 10, midY);
+    b.beginPath(); // ▾
+    b.moveTo(x + selW - 18, midY - 2);
+    b.lineTo(x + selW - 14, midY + 2);
+    b.lineTo(x + selW - 10, midY - 2);
+    b.strokeStyle = '#fff';
+    b.lineWidth = 1.5;
+    b.stroke();
+    x += selW + 14;
+    b.save();
+    const btnGrad = b.createLinearGradient(0, midY - 20, 0, midY + 20);
+    btnGrad.addColorStop(0, '#fff06a');
+    btnGrad.addColorStop(1, '#fbd90f');
+    b.shadowColor = 'rgba(255, 220, 0, .45)';
+    b.shadowBlur = 18 * S;
+    roundRect(b, x, midY - 20, btnW, 40, 20);
+    b.fillStyle = btnGrad;
+    b.fill();
+    b.restore();
+    b.textAlign = 'center';
+    b.font = font(900, 16);
+    b.fillStyle = '#222';
+    b.fillText('추첨', x + btnW / 2, midY + 1);
+
+    function paintCard(card, p) {
+      const scale = 0.55 + 0.45 * easeOutBack(p);
+      ctx.save();
+      ctx.globalAlpha = 0.25 + 0.75 * Math.min(1, p * 1.4);
+      ctx.translate(card.x + CW / 2, card.y + CH / 2);
+      ctx.scale(scale, scale);
+      ctx.translate(-CW / 2, -CH / 2);
+
+      ctx.save();
+      ctx.shadowColor = 'rgba(0, 0, 0, .35)';
+      ctx.shadowBlur = 14 * S;
+      ctx.shadowOffsetY = 6 * S;
+      const grad = ctx.createLinearGradient(0, 0, CW, CH);
+      grad.addColorStop(0, '#ffe20a');
+      grad.addColorStop(1, '#f6b008');
+      roundRect(ctx, 0, 0, CW, CH, 6);
+      ctx.fillStyle = grad;
+      ctx.fill();
+      ctx.restore();
+
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = font(700, 10.5);
+      ctx.fillStyle = '#6b4c00';
+      ctx.fillText(card.rank, CW / 2, 17);
+      fitFont(ctx, 900, 15, card.name, CW - 12);
+      ctx.fillStyle = '#2a1900';
+      ctx.fillText(card.name, CW / 2, CH / 2 + 1);
+      ctx.font = font(500, 10.5);
+      ctx.fillStyle = '#7a5500';
+      ctx.fillText(card.pos, CW / 2, CH - 16);
+
+      // 처음엔 어두웠다가 밝아진다
+      if (p < 1) {
+        roundRect(ctx, 0, 0, CW, CH, 6);
+        ctx.fillStyle = `rgba(0, 0, 0, ${0.55 * (1 - p)})`;
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    const stampAt = LEAD_MS + k * STEP_MS;
+
+    function paint(t) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(still, 0, 0);
+      ctx.setTransform(S, 0, 0, S, 0, 0);
+      for (const card of cards) {
+        const p = (t - card.at) / POP_MS;
+        if (p > 0) paintCard(card, Math.min(p, 1));
+      }
+      if (t >= stampAt) {
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        fitFont(ctx, 400, 12, draw.stamp, innerW);
+        ctx.fillStyle = '#a99bb8';
+        ctx.fillText(draw.stamp, W / 2, stampY);
+      }
+    }
+
+    return { canvas, paint, duration: stampAt + HOLD_MS };
+  }
 
   namesEl.addEventListener('input', updateCount);
   reloadBtn.addEventListener('click', loadFromSite);
