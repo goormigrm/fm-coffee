@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>FC 안양 댓글 추첨</title>
 <meta name="description" content="에펨코리아 글의 댓글 작성자 중에서 당첨자를 추첨합니다.">
+<link rel="icon" type="image/png" href="emblem.png">
+<link rel="apple-touch-icon" href="emblem.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
@@ -40,8 +42,12 @@
     background: var(--panel);
     border: 1px solid var(--panel-line);
     border-radius: 14px;
-    padding: 44px 28px 32px;
+    padding: 32px 28px 32px;
     box-shadow: 0 20px 60px rgba(0, 0, 0, .35);
+  }
+  .emblem {
+    display: block; width: 88px; height: 88px; margin: 0 auto 14px;
+    filter: drop-shadow(0 0 12px rgba(255, 214, 0, .35));
   }
   h1 {
     margin: 0;
@@ -159,7 +165,8 @@
 
   @media (max-width: 520px) {
     body { padding: 16px 12px 36px; }
-    .panel { padding: 30px 16px 24px; }
+    .panel { padding: 24px 16px 24px; }
+    .emblem { width: 68px; height: 68px; margin-bottom: 10px; }
     h1 { font-size: 23px; }
     .win { flex-basis: calc(50% - 5px); }
   }
@@ -170,6 +177,7 @@
 </head>
 <body>
   <main class="panel">
+    <img class="emblem" src="emblem.png" alt="FC 안양 엠블럼">
     <h1>FC 안양 팬 댓글 당첨자 추첨</h1>
     <p class="sub" id="sub"></p>
 
